@@ -1,0 +1,9 @@
+# .gitignore
+build/
+bin/
+lib/
+*.o
+compile_commands.json
+.vscode/
+*.pb.cc
+*.pb.h

@@ -1,0 +1,17 @@
+cmake_minimum_required(VERSION 3.10)
+project(TinyRPC VERSION 1.0.0 LANGUAGES CXX)
+
+# 设置 C++ 标准为 C++17
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# 寻找 Protobuf 依赖
+find_package(Protobuf REQUIRED)
+
+# 包含头文件目录
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+include_directories(${CMAKE_CURRENT_BINARY_DIR}) # 用于存放 protoc 生成的 .pb.h
+
+# 暂时的空目标，等我们写了代码再把源文件加进来
+# add_library(tinyrpc src/xxx.cpp)
