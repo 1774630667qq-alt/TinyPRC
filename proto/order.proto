@@ -1,0 +1,21 @@
+// proto/order.proto
+
+// 1. 指定语法版本
+syntax = "proto3";
+
+// 2. 指定包名 (编译后会变成 C++ 的 namespace tiny_rpc)
+package tiny_rpc;
+
+// 3. 定义请求体
+message OrderRequest {
+    string order_id = 1;  
+    int32 item_count = 2; 
+    double price = 3;
+}
+
+// 4. 定义响应体
+message OrderResponse {
+    int32 ret_code = 1;     // 状态码：比如 0 代表成功，-1 代表失败
+    string res_info = 2;    // 响应信息：比如 "success"
+    string order_id = 3;    // 回传处理的订单 ID
+}
