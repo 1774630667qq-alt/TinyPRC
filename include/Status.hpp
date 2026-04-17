@@ -16,4 +16,13 @@ namespace MyRPC {
         kHalfPacket,  // 数据不够，是个半包，需要等待更多网络数据
         kError        // 魔数不对或协议损坏，遭遇脏数据
     };
+
+    /**
+    * @brief 原子状态机，枚举类型，用于表示连接的状态
+    */
+    enum StateE { 
+        kConnected,     // 正常连接中
+        kDisconnecting, // 正在执行处决命令（微秒级过渡态）
+        kDisconnected   // 已经彻底死透了
+    };
 } // namespace MyRPC

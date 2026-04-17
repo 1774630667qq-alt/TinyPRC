@@ -6,8 +6,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# 1. 寻找系统中的 Protobuf 依赖
+# 1. 寻找系统中的 Protobuf 及 Threads 依赖
 find_package(Protobuf REQUIRED)
+find_package(Threads REQUIRED)
 
 # 2. 设置头文件包含目录
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -30,5 +31,5 @@ protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILE})
 # 4. 编译我们的测试可执行文件 (把生成的 .pb.cc 和 main.cpp 一起编译)
 add_executable(proto_test src/main.cpp ${SRC_LIST} ${PROTO_SRCS})
 
-# 5. 链接 Protobuf 的 C++ 运行时库
-target_link_libraries(proto_test PRIVATE ${Protobuf_LIBRARIES})
+# 5. 链接 Protobuf 的 C++ 运行时库及多线程库
+target_link_libraries(proto_test PRIVATE ${Protobuf_LIBRARIES} Threads::Threads)

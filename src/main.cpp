@@ -2,7 +2,7 @@
  * @Author: Zhang YuHua 1774630667@qq.com
  * @Date: 2026-04-17 17:19:46
  * @LastEditors: Zhang YuHua 1774630667@qq.com
- * @LastEditTime: 2026-04-17 19:46:33
+ * @LastEditTime: 2026-04-17 19:55:25
  * @FilePath: /TinyPRC/src/main.cpp
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%A
  */
@@ -37,7 +37,7 @@ int main() {
 
     std::string encoded2 = MyRPC::ProtocolUtil::Encode(header2, req2);
     // 只截取一部分放入 Buffer，例如只放入前 10 个字节，模拟网络发送数据的断裂
-    buffer.append(encoded2.c_str(), 10);
+    buffer.append(encoded2.data(), 10);
 
     // 3. 核心拆包循环（这就是你未来写在 TcpConnection::onMessage 里的代码）
     while (buffer.readableBytes() > 0) {

@@ -2,7 +2,7 @@
  * @Author: Zhang YuHua 1774630667@qq.com
  * @Date: 2026-04-17 18:38:34
  * @LastEditors: Zhang YuHua 1774630667@qq.com
- * @LastEditTime: 2026-04-17 19:44:18
+ * @LastEditTime: 2026-04-17 19:56:13
  * @FilePath: /TinyPRC/src/ProtocolUtil.cpp
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置
  * 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
@@ -29,13 +29,19 @@ namespace MyRPC {
     }
 
     DecodeStatus ProtocolUtil::Decode(const Buffer* buffer, RpcHeader &out_header, google::protobuf::Message &out_message) {
-        DecodeStatus status = findPRCHeader(buffer, out_header);
+        DecodeStatus status = findRPCHeader(buffer, out_header);
         if (status != DecodeStatus::kSuccess) {
             return status;
         }
 
         if (buffer->readableBytes() < sizeof(RpcHeader) + out_header.data_size) {
             return DecodeStatus::kHalfPacket;
+        }
+
+        const uint32_t MAX_RPC_BADY_SIZE = 10 * 1024 * 1024;
+        
+        if (out_header.data_size > MAX_RPC_BADY_SIZE) {
+            return DecodeStatus::kError;
         }
 
         // 优化策略：零拷贝提取并解析 body
@@ -48,7 +54,7 @@ namespace MyRPC {
         }
     }
 
-    DecodeStatus ProtocolUtil::findPRCHeader(const Buffer *buffer, RpcHeader &out_header) {
+    DecodeStatus ProtocolUtil::findRPCHeader(const Buffer *buffer, RpcHeader &out_header) {
         if (buffer->readableBytes() < sizeof(RpcHeader)) {
             return DecodeStatus::kHalfPacket;
         }

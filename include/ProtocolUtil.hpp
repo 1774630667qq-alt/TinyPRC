@@ -35,6 +35,6 @@ namespace MyRPC {
          */
         static DecodeStatus Decode(const Buffer* buffer, RpcHeader& out_header, google::protobuf::Message& out_message);
 
-        static DecodeStatus findPRCHeader(const Buffer* buffer, RpcHeader& out_header);
+        static DecodeStatus findRPCHeader(const Buffer* buffer, RpcHeader& out_header);
     };
 } // namespace MyRPC
