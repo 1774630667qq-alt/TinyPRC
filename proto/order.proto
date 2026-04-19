@@ -4,7 +4,11 @@
 syntax = "proto3";
 
 // 2. 指定包名 (编译后会变成 C++ 的 namespace tiny_rpc)
+// buf:lint:ignore PACKAGE_DIRECTORY_MATCH
+// buf:lint:ignore PACKAGE_VERSION_SUFFIX
 package tiny_rpc;
+
+option cc_enable_arenas = true;
 
 // 3. 定义请求体
 message OrderRequest {
@@ -18,4 +22,10 @@ message OrderResponse {
     int32 ret_code = 1;     // 状态码：比如 0 代表成功，-1 代表失败
     string res_info = 2;    // 响应信息：比如 "success"
     string order_id = 3;    // 回传处理的订单 ID
+}
+
+service OrderService {
+    // buf:lint:ignore RPC_REQUEST_STANDARD_NAME
+    // buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+    rpc QueryOrder(OrderRequest) returns (OrderResponse);
 }

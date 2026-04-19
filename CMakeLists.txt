@@ -22,7 +22,7 @@ list(REMOVE_ITEM SRC_LIST "src/main.cpp")
 # 下面是为你接下来的微任务 1.1 预留的编译规则
 # =========================================================
 
-set(PROTO_FILE ${CMAKE_CURRENT_SOURCE_DIR}/proto/order.proto)
+file(GLOB PROTO_FILE "${CMAKE_CURRENT_SOURCE_DIR}/proto/*.proto")
 
 # 3. 这是一个 CMake 魔法：它会自动调用 protoc 编译 .proto 文件
 # 并且把生成的 .pb.cc 和 .pb.h 文件路径存入 PROTO_SRCS 和 PROTO_HDRS 变量中

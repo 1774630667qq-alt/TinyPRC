@@ -2,35 +2,43 @@
  * @Author: Zhang YuHua 1774630667@qq.com
  * @Date: 2026-04-17 22:20:21
  * @LastEditors: Zhang YuHua 1774630667@qq.com
- * @LastEditTime: 2026-04-17 23:33:44
+ * @LastEditTime: 2026-04-19 15:30:00
  * @FilePath: /TinyRPC/include/RpcServer.hpp
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置
- * 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ * @Description: RPC 服务器 — 纯业务路由层
  */
 #pragma once
 #include "TcpServer.hpp"
 #include "ThreadPool.hpp"
 #include "Buffer.hpp"
+#include "rpc/RpcCodec.hpp"
 #include <memory>
 
 namespace MyRPC {
 
 class RpcServer {
 public:
-    // 构造函数需要传入业务线程池
+    /// 构造函数：需要传入事件循环、监听端口和业务线程池
     RpcServer(EventLoop* loop, int port, ThreadPool* pool);
     
     void start();
     
-    // 配置底层的 Sub-Reactor 数量
+    /// 配置底层的 Sub-Reactor 数量
     void setThreadNum(int numThreads);
 
 private:
     TcpServer server_;
-    ThreadPool* pool_; // 业务后厨线程池
+    ThreadPool* pool_;      ///< 业务后厨线程池
+    RpcCodec codec_;        ///< 编解码器中间层：负责切包
 
-    // 收到网络数据时的入口回调
-    void onMessage(const std::shared_ptr<TcpConnection>& conn, Buffer* buffer);
+    /**
+     * @brief 纯业务回调：接收已切好的完整 RPC 包
+     * @param conn 当前 TCP 连接
+     * @param meta 已解析的 RPC 协议元数据
+     * @param raw_body 原始业务二进制数据（由本方法负责反序列化）
+     */
+    void onRpcMessage(const std::shared_ptr<TcpConnection>& conn,
+                      const tiny_rpc::RpcMeta& meta,
+                      const std::string& raw_body);
 };
 
 } // namespace MyRPC

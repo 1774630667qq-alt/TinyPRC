@@ -1,0 +1,13 @@
+// 正确写法
+syntax = "proto3"; // 注意这里要有双引号！
+
+package tiny_rpc;
+
+message RpcMeta {
+    string method_name = 1;         // 方法名
+    string service_name = 2;        // 服务名
+    int32 timeout_ms = 3;           // 超时时间
+    string trace_id = 4;            // 日志追踪id
+    int32 sequence_id = 5;          // 序列号
+    int32 type = 6;                 // 消息类型 (0: 请求, 1: 响应, 2: 错误)
+}
