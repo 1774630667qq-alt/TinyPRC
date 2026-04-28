@@ -2,7 +2,7 @@
  * @Author: Zhang YuHua 1774630667@qq.com
  * @Date: 2026-04-19 15:28:00
  * @LastEditors: Zhang YuHua 1774630667@qq.com
- * @LastEditTime: 2026-04-19 15:28:00
+ * @LastEditTime: 2026-04-20 13:56:11
  * @FilePath: /TinyRPC/src/RpcCodec.cpp
  * @Description: RPC 编解码器中间层实现
  */
@@ -11,6 +11,7 @@
 #include "Buffer.hpp"
 #include "TcpConnection.hpp"
 #include "Logger.hpp"
+#include <utility>
 
 namespace MyRPC {
 
@@ -32,7 +33,7 @@ void RpcCodec::parseMessage(const std::shared_ptr<TcpConnection>& conn, Buffer* 
 
             // 将切好的干净包抛给上层业务
             if (messageCallback_) {
-                messageCallback_(conn, meta, raw_body);
+                messageCallback_(conn, meta, std::move(raw_body));
             }
         } 
         else if (status == DecodeStatus::kHalfPacket) {

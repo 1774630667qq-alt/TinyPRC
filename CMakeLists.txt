@@ -16,7 +16,10 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}) 
 
 file(GLOB SRC_LIST "src/*.cpp")
-list(REMOVE_ITEM SRC_LIST "src/main.cpp")
+list(REMOVE_ITEM SRC_LIST
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_cilent.cpp"
+)
 
 # =========================================================
 # 下面是为你接下来的微任务 1.1 预留的编译规则
@@ -30,6 +33,8 @@ protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILE})
 
 # 4. 编译我们的测试可执行文件 (把生成的 .pb.cc 和 main.cpp 一起编译)
 add_executable(proto_test src/main.cpp ${SRC_LIST} ${PROTO_SRCS})
+add_executable(client_test src/test_cilent.cpp ${SRC_LIST} ${PROTO_SRCS})
 
 # 5. 链接 Protobuf 的 C++ 运行时库及多线程库
 target_link_libraries(proto_test PRIVATE ${Protobuf_LIBRARIES} Threads::Threads)
+target_link_libraries(client_test PRIVATE ${Protobuf_LIBRARIES} Threads::Threads)

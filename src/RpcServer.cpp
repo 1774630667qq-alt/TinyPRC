@@ -2,16 +2,22 @@
  * @Author: Zhang YuHua 1774630667@qq.com
  * @Date: 2026-04-17 22:20:32
  * @LastEditors: Zhang YuHua 1774630667@qq.com
- * @LastEditTime: 2026-04-19 15:30:00
+ * @LastEditTime: 2026-04-28 17:05:46
  * @FilePath: /TinyRPC/src/RpcServer.cpp
  * @Description: RPC 服务器实现 — 纯业务路由层
  */
 #include "RpcServer.hpp"
-#include "ProtocolUtil.hpp"
+#include "EventLoop.hpp"
 #include "TcpConnection.hpp"
+#include "ProtocolUtil.hpp"
 #include "Logger.hpp"
 #include "order.pb.h"
+#include <google/protobuf/descriptor.h>
+#include <google/protobuf/message.h>
+#include <google/protobuf/service.h>
 #include <unistd.h>
+#include "ModernClosure.hpp"
+#include "Logger.hpp"
 
 namespace MyRPC {
 RpcServer::RpcServer(EventLoop* loop, int port, ThreadPool* pool)
@@ -21,8 +27,8 @@ RpcServer::RpcServer(EventLoop* loop, int port, ThreadPool* pool)
     // 1. 设置 codec_ 的上层业务回调
     codec_.setMessageCallback([this] (const std::shared_ptr<TcpConnection>& conn,
                                       const tiny_rpc::RpcMeta& meta,
-                                      const std::string& raw_body) {
-        onRpcMessage(conn, meta, raw_body);
+                                      std::string raw_body) {
+        onRpcMessage(conn, meta, std::move(raw_body));
     });
 
     // 2. 将底层 TcpServer 的原始字节流回调全部委托给 codec_
@@ -37,86 +43,62 @@ void RpcServer::start() {
 
 void RpcServer::onRpcMessage(const std::shared_ptr<TcpConnection>& conn,
                               const tiny_rpc::RpcMeta& meta,
-                              const std::string& raw_body) {
-    // TODO: 后续实现动态路由分发
-    //   1. 根据 meta.service_name() 查找已注册的 Service 对象
-    //   2. 根据 meta.method_name() 找到该 Service 上的具体方法描述符
-    //   3. 用 raw_body 反序列化出具体的 Request Message
-    //   4. 扔进线程池 pool_ 执行业务逻辑
-    //   5. 将执行结果通过 Encode 打包后投递回 IO 线程发送
-
+                              std::string raw_body) {
     // ============ 临时硬编码业务逻辑（过渡阶段） ============
     // 捕获 meta 和 raw_body 的副本，交给线程池异步执行
-    std::string body_copy = raw_body;
-    tiny_rpc::RpcMeta meta_copy = meta;
+    if (services_.find(meta.service_name()) == services_.end()) {
+        LOG_ERROR << "未注册服务: " << meta.service_name();
+        return;
+    }
 
-    pool_->enqueue([conn, meta_copy = std::move(meta_copy), body_copy = std::move(body_copy)] () {
-        tiny_rpc::OrderRequest req;
-        
-        if (!req.ParseFromString(body_copy)) {
-            LOG_ERROR << "[Worker] Protobuf 反序列化失败，method=" << meta_copy.method_name()
-                      << ", seq=" << meta_copy.sequence_id();
+    pool_->enqueue([conn, meta_copy = std::move(meta), body_copy = std::move(raw_body),
+                    service = services_[meta.service_name()]] () {
+        auto method = service->GetDescriptor()->FindMethodByName(meta_copy.method_name());
 
-            // 构造错误响应
-            tiny_rpc::OrderResponse err_resp;
-            err_resp.set_ret_code(-1);
-            err_resp.set_res_info("RPC Error: Protobuf Parse Failed!");
+        google::protobuf::Message* request = service->GetRequestPrototype(method).New();
+        google::protobuf::Message* response = service->GetResponsePrototype(method).New();
 
-            // 打包并投递回 IO 线程发送
-            tiny_rpc::RpcMeta resp_meta;
-            resp_meta.set_sequence_id(meta_copy.sequence_id());
-            resp_meta.set_service_name(meta_copy.service_name());
-            resp_meta.set_method_name(meta_copy.method_name());
-            resp_meta.set_type(1); // 1 = 响应
+        request->ParseFromString(body_copy);
 
-            std::string err_body;
-            err_resp.SerializeToString(&err_body);
-            std::string err_str = ProtocolUtil::Encode(resp_meta, err_body);
+        google::protobuf::Closure* done = new MyRPC::ModernClosure(
+            [conn, request, response, meta_copy] () {
+                // 序列化业务响应，并封装成完整 RPC 响应帧
+                std::string body;
+                response->SerializeToString(&body);
 
-            EventLoop* io_loop = conn->getLoop();
-            io_loop->queueInLoop([conn, err_str]() {
-                conn->send(err_str);
+                tiny_rpc::RpcMeta resp_meta;
+                resp_meta.set_service_name(meta_copy.service_name());
+                resp_meta.set_method_name(meta_copy.method_name());
+                resp_meta.set_sequence_id(meta_copy.sequence_id());
+                resp_meta.set_type(1);
 
-                if (conn->recordBadRequest()) {
-                    LOG_ERROR << "fd=" << conn->getFd() << " 多次发送错误请求，断开连接";
-                    conn->forceClose();
-                }
-            });
+                std::string packet = MyRPC::ProtocolUtil::Encode(resp_meta, body);
+                EventLoop* loop = conn->getLoop();
 
-            return;
-        }
-
-        // =============== 业务逻辑 =================
-        LOG_INFO << "[Worker] 收到订单查询: " << req.order_id()
-                 << ", method=" << meta_copy.method_name()
-                 << ", seq=" << meta_copy.sequence_id();
-
-        // 模拟耗时的数据库查询
-        sleep(1);
-
-        // 构建响应
-        tiny_rpc::OrderResponse resp;
-        resp.set_ret_code(0);
-        resp.set_res_info("Success");
-        resp.set_order_id(req.order_id());
-
-        // 构建响应 Meta（sequence_id 原样返回）
-        tiny_rpc::RpcMeta resp_meta;
-        resp_meta.set_sequence_id(meta_copy.sequence_id());
-        resp_meta.set_service_name(meta_copy.service_name());
-        resp_meta.set_method_name(meta_copy.method_name());
-        resp_meta.set_type(1); // 1 = 响应
-
-        // 序列化并投递回 IO 线程发送
-        std::string resp_body;
-        resp.SerializeToString(&resp_body);
-        std::string response_str = ProtocolUtil::Encode(resp_meta, resp_body);
-
-        EventLoop* io_loop = conn->getLoop();
-        io_loop->queueInLoop([conn, response_str]() {
-            conn->clearBadRecord();
-            conn->send(response_str);
-        });
+                loop->queueInLoop([conn, packet] () {
+                    LOG_INFO << "开始发送 RPC 响应包，长度：" << packet.size();
+                    conn->send(packet);
+                });
+                delete request;
+                delete response;
+            }
+        );
+        service->CallMethod(method, nullptr, request, response, done);
     });
+}
+
+void RpcServer::registerService(google::protobuf::Service* service) {
+    const google::protobuf::ServiceDescriptor* descriptor = service->GetDescriptor();
+    
+    std::string service_name = descriptor->full_name();
+    
+    if (services_.find(service_name) != services_.end()) {
+        LOG_WARNING << "重复注册服务: " << service_name;
+        return;
+    }
+
+    services_[service_name] = service;
+
+    LOG_INFO << "注册服务: " << service_name;
 }
 } // namespace MyRPC

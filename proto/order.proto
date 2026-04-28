@@ -9,6 +9,7 @@ syntax = "proto3";
 package tiny_rpc;
 
 option cc_enable_arenas = true;
+option cc_generic_services = true;
 
 // 3. 定义请求体
 message OrderRequest {

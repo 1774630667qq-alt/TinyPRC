@@ -2,7 +2,7 @@
  * @Author: Zhang YuHua 1774630667@qq.com
  * @Date: 2026-04-19 15:28:00
  * @LastEditors: Zhang YuHua 1774630667@qq.com
- * @LastEditTime: 2026-04-19 15:28:00
+ * @LastEditTime: 2026-04-20 13:56:43
  * @FilePath: /TinyRPC/include/rpc/RpcCodec.hpp
  * @Description: RPC 编解码器中间层，负责从字节流中切出完整的 RPC 包
  */
@@ -26,7 +26,7 @@ class Buffer;
 using RpcMessageCallback = std::function<void(
     const std::shared_ptr<TcpConnection>& conn,
     const tiny_rpc::RpcMeta& meta,
-    const std::string& raw_body
+    std::string raw_body
 )>;
 
 /**

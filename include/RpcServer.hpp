@@ -2,16 +2,17 @@
  * @Author: Zhang YuHua 1774630667@qq.com
  * @Date: 2026-04-17 22:20:21
  * @LastEditors: Zhang YuHua 1774630667@qq.com
- * @LastEditTime: 2026-04-19 15:30:00
+ * @LastEditTime: 2026-04-28 16:21:05
  * @FilePath: /TinyRPC/include/RpcServer.hpp
  * @Description: RPC 服务器 — 纯业务路由层
  */
 #pragma once
 #include "TcpServer.hpp"
 #include "ThreadPool.hpp"
-#include "Buffer.hpp"
 #include "rpc/RpcCodec.hpp"
+#include <google/protobuf/service.h>
 #include <memory>
+#include <unordered_map>
 
 namespace MyRPC {
 
@@ -19,11 +20,12 @@ class RpcServer {
 public:
     /// 构造函数：需要传入事件循环、监听端口和业务线程池
     RpcServer(EventLoop* loop, int port, ThreadPool* pool);
-    
+    std::unordered_map<std::string, google::protobuf::Service*> services_;
     void start();
     
     /// 配置底层的 Sub-Reactor 数量
     void setThreadNum(int numThreads);
+    void registerService(google::protobuf::Service* service);
 
 private:
     TcpServer server_;
@@ -38,7 +40,8 @@ private:
      */
     void onRpcMessage(const std::shared_ptr<TcpConnection>& conn,
                       const tiny_rpc::RpcMeta& meta,
-                      const std::string& raw_body);
+                      std::string raw_body);
+
 };
 
 } // namespace MyRPC
