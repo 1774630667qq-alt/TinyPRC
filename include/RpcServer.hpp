@@ -2,7 +2,7 @@
  * @Author: Zhang YuHua 1774630667@qq.com
  * @Date: 2026-04-17 22:20:21
  * @LastEditors: Zhang YuHua 1774630667@qq.com
- * @LastEditTime: 2026-04-28 16:21:05
+ * @LastEditTime: 2026-04-28 17:52:35
  * @FilePath: /TinyRPC/include/RpcServer.hpp
  * @Description: RPC 服务器 — 纯业务路由层
  */
@@ -41,6 +41,19 @@ private:
     void onRpcMessage(const std::shared_ptr<TcpConnection>& conn,
                       const tiny_rpc::RpcMeta& meta,
                       std::string raw_body);
+
+    /**
+     * @brief 构造并发送一个错误响应帧给客户端
+     * @signature void sendErrorResponse(const std::shared_ptr<TcpConnection>& conn, const tiny_rpc::RpcMeta& meta, int32_t err_code, const std::string& err_msg)
+     * @param conn 当前 TCP 连接
+     * @param meta 原始请求的 RpcMeta（用于复制路由三元组：service_name, method_name, sequence_id）
+     * @param err_code 错误码
+     * @param err_msg 错误描述信息
+     */
+    void sendErrorResponse(const std::shared_ptr<TcpConnection>& conn,
+                           const tiny_rpc::RpcMeta& meta,
+                           int32_t err_code,
+                           const std::string& err_msg);
 
 };
 

@@ -144,6 +144,13 @@ namespace MyRPC
         }
     }
 
+    void EventLoop::removeChannel(Channel* channel) {
+        int fd = channel->getFd();
+        if (epoll_ctl(epfd_, EPOLL_CTL_DEL, fd, nullptr) == -1) {
+            LOG_ERROR << "Epoll 删除 Channel 失败, fd=" << fd;
+        }
+    }
+
     std::shared_ptr<Timer> EventLoop::runAfter(int timeout_ms, TimeoutCallback cb) {
         return timerQueue_->addTimer(timeout_ms, std::move(cb));
     }

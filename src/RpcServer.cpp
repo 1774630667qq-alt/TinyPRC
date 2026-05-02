@@ -2,7 +2,7 @@
  * @Author: Zhang YuHua 1774630667@qq.com
  * @Date: 2026-04-17 22:20:32
  * @LastEditors: Zhang YuHua 1774630667@qq.com
- * @LastEditTime: 2026-04-28 17:05:46
+ * @LastEditTime: 2026-04-28 17:52:35
  * @FilePath: /TinyRPC/src/RpcServer.cpp
  * @Description: RPC 服务器实现 — 纯业务路由层
  */
@@ -51,14 +51,27 @@ void RpcServer::onRpcMessage(const std::shared_ptr<TcpConnection>& conn,
         return;
     }
 
-    pool_->enqueue([conn, meta_copy = std::move(meta), body_copy = std::move(raw_body),
+    pool_->enqueue([this, conn, meta_copy = std::move(meta), body_copy = std::move(raw_body),
                     service = services_[meta.service_name()]] () {
         auto method = service->GetDescriptor()->FindMethodByName(meta_copy.method_name());
+
+        // 拦截：检查这个方法是否在 allow_methods_ 列表里
+        if (!method) {
+            LOG_ERROR << "未注册方法: " << meta_copy.method_name();
+            sendErrorResponse(conn, meta_copy, 1001, "方法未找到: " + meta_copy.method_name());
+            return;
+        }
 
         google::protobuf::Message* request = service->GetRequestPrototype(method).New();
         google::protobuf::Message* response = service->GetResponsePrototype(method).New();
 
-        request->ParseFromString(body_copy);
+        if (!(request->ParseFromString(body_copy))) {
+            LOG_ERROR << "解析请求体失败: " << meta_copy.method_name();
+            sendErrorResponse(conn, meta_copy, 1002, "请求体反序列化失败: " + meta_copy.method_name());
+            delete request;
+            delete response;
+            return;
+        }
 
         google::protobuf::Closure* done = new MyRPC::ModernClosure(
             [conn, request, response, meta_copy] () {
@@ -101,4 +114,24 @@ void RpcServer::registerService(google::protobuf::Service* service) {
 
     LOG_INFO << "注册服务: " << service_name;
 }
+
+void RpcServer::sendErrorResponse(const std::shared_ptr<TcpConnection>& conn,
+                                  const tiny_rpc::RpcMeta& meta,
+                                  int32_t err_code,
+                                  const std::string& err_msg) {
+    tiny_rpc::RpcMeta err_meta;
+    err_meta.set_service_name(meta.service_name());
+    err_meta.set_method_name(meta.method_name());
+    err_meta.set_sequence_id(meta.sequence_id());
+    err_meta.set_type(2);           // 错误
+    err_meta.set_err_code(err_code);
+    err_meta.set_err_msg(err_msg);
+
+    std::string err_packet = ProtocolUtil::Encode(err_meta, "");
+    EventLoop* loop = conn->getLoop();
+    loop->queueInLoop([conn, err_packet]() {
+        conn->send(err_packet);
+    });
+}
+
 } // namespace MyRPC

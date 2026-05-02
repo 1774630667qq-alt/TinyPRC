@@ -79,6 +79,15 @@ public:
      */
     void updateChannel(Channel* channel);
 
+    /**
+     * @brief 从 epoll 监听树中彻底删除指定 Channel 对应的文件描述符
+     * @details 内部调用 EPOLL_CTL_DEL。当 Connector 将 sockfd 移交给 TcpConnection 前，
+     * 必须先调用此方法将其从旧 Channel 的 epoll 注册中彻底移除，
+     * 防止 close(fd) 后 epoll 仍持有野指针导致未定义行为。
+     * @param channel 需要从 epoll 中删除的 Channel 对象指针
+     */
+    void removeChannel(Channel* channel);
+
     // --- 新增：跨线程投递任务的接口 ---
     
     /**

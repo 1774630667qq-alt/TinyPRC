@@ -1,140 +1,72 @@
-#include <cstddef>
-#include <cerrno>
-#include <cstring>
-#include <string>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include "ProtocolUtil.hpp"
+/**
+ * @brief 异步 RPC 客户端测试
+ *
+ * 使用 TcpClient + RpcChannel 实现基于 EventLoop 的异步长连接 RPC 调用。
+ * 启动后自动连接服务器，连接成功后发起 OrderService.QueryOrder 调用，
+ * 收到响应后打印结果并退出。
+ *
+ * 特性：
+ * - 连接失败时自动指数退避重连（500ms → 1s → 2s → ... → 30s）
+ * - 断连后自动重连
+ * - 完全异步非阻塞
+ */
+#include "EventLoop.hpp"
+#include "TcpClient.hpp"
+#include "TcpConnection.hpp"
+#include "rpc/RpcChannel.hpp"
 #include "Logger.hpp"
-#include "Buffer.hpp"
+#include "ModernClosure.hpp"
 #include "order.pb.h"
-#include "rpc_meta.pb.h"
 
-namespace {
-bool sendAll(int fd, const std::string& data) {
-    const char* p = data.data();
-    size_t left = data.size();
+int main() {
+    MyRPC::EventLoop loop;
+    MyRPC::TcpClient client(&loop, "127.0.0.1", 8080);
+    MyRPC::RpcChannel channel(&client, &loop);
 
-    while (left > 0) {
-        ssize_t n = send(fd, p, left, 0);
-        if (n > 0) {
-            p += n;
-            left -= static_cast<size_t>(n);
-        } else if (n < 0 && errno == EINTR) {
-            continue;
-        } else {
-            LOG_ERROR << "发送 RPC 请求失败: " << strerror(errno);
-            return false;
+    // 注册 RpcChannel::onMessage 为 TcpClient 的消息回调
+    client.setMessageCallback(
+        [&channel](const std::shared_ptr<MyRPC::TcpConnection>& conn, MyRPC::Buffer* buf) {
+            channel.onMessage(conn, buf);
         }
-    }
+    );
 
-    return true;
-}
+    // 连接建立后发起 RPC 调用
+    client.setConnectionCallback(
+        [&channel, &loop](const std::shared_ptr<MyRPC::TcpConnection>& conn) {
+            LOG_INFO << "✅ 已连接到服务器，准备发起 RPC 调用...";
 
-MyRPC::DecodeStatus recvOneRpcFrame(int fd,
-                                    tiny_rpc::RpcMeta& resp_meta,
-                                    std::string& raw_body) {
-    MyRPC::Buffer recv_buf;
-    char buf[4096];
+            // 构造请求
+            auto* req = new tiny_rpc::OrderRequest();
+            auto* resp = new tiny_rpc::OrderResponse();
+            req->set_order_id("ORD-998244353");
 
-    while (true) {
-        ssize_t n = recv(fd, buf, sizeof(buf), 0);
-        if (n > 0) {
-            recv_buf.append(buf, static_cast<size_t>(n));
+            // 构造完成回调
+            auto* done = new MyRPC::ModernClosure(
+                [req, resp, &loop]() {
+                    LOG_INFO << "\n🎉🎉🎉 异步 RPC 调用成功！";
+                    LOG_INFO << "📥 RetCode: " << resp->ret_code()
+                             << ", Info: " << resp->res_info()
+                             << ", OrderID: " << resp->order_id();
+                    delete req;
+                    delete resp;
 
-            size_t consumed = 0;
-            MyRPC::DecodeStatus status = MyRPC::ProtocolUtil::Decode(
-                recv_buf.peek(), recv_buf.readableBytes(),
-                resp_meta, raw_body, consumed);
+                    // 收到响应后优雅退出
+                    loop.quit();
+                }
+            );
 
-            if (status == MyRPC::DecodeStatus::kSuccess) {
-                recv_buf.retrieve(consumed);
-                return status;
-            }
+            // 通过 Protobuf Stub 发起异步 RPC 调用
+            tiny_rpc::OrderService_Stub stub(&channel);
+            stub.QueryOrder(nullptr, req, resp, done);
 
-            if (status == MyRPC::DecodeStatus::kError) {
-                return status;
-            }
-
-            // 半包：继续阻塞读取，直到收到完整 RPC 帧或连接断开。
-            continue;
+            LOG_INFO << "📤 已发送 RPC 请求 (异步), 订单号: ORD-998244353";
         }
+    );
 
-        if (n == 0) {
-            LOG_ERROR << "接收响应失败: 服务器关闭连接";
-            return MyRPC::DecodeStatus::kError;
-        }
+    LOG_INFO << "🚀 启动 RPC 客户端，连接 127.0.0.1:8080 ...";
+    client.connect();
+    loop.loop();  // 进入事件循环
 
-        if (errno == EINTR) {
-            continue;
-        }
-
-        LOG_ERROR << "接收响应失败: " << strerror(errno);
-        return MyRPC::DecodeStatus::kError;
-    }
-}
-} // namespace
-
-int main () {
-    // 准备要发送的数据
-    tiny_rpc::RpcMeta meta;
-    meta.set_service_name("tiny_rpc.OrderService"); // 告诉服务器调哪个服务
-    meta.set_method_name("QueryOrder");             // 调哪个方法
-    meta.set_sequence_id(1001);                     // 随便给个序列号
-    meta.set_type(0);                               // 0 代表 Request
-
-    tiny_rpc::OrderRequest req;
-    req.set_order_id("ORD-998244353");              // 填充业务数据
-
-    // 构建二进制流
-    std::string raw_body;
-    req.SerializeToString(&raw_body);  // 将 req 序列化到 raw_body
-    std::string body = MyRPC::ProtocolUtil::Encode(meta, raw_body);
-    
-    int clientFD = socket(AF_INET, SOCK_STREAM, 0);
-
-    sockaddr_in serverAddr;
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(8080);
-    inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr.s_addr);
-
-    if (connect(clientFD, (sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
-        LOG_ERROR << "连接失败";
-        return -1;
-    }
-
-    LOG_INFO << "已连接到服务器";
-
-    if (!sendAll(clientFD, body)) {
-        close(clientFD);
-        return -1;
-    }
-
-    LOG_INFO << "已发送 RPC 请求，序列号: 1001，订单号: ORD-998244353";
-
-    tiny_rpc::RpcMeta resp_meta;
-    tiny_rpc::OrderResponse resp;
-    raw_body.clear();
-
-    MyRPC::DecodeStatus status = recvOneRpcFrame(clientFD, resp_meta, raw_body);
-
-    if (status != MyRPC::DecodeStatus::kSuccess) {
-        LOG_ERROR << "❌ 解析响应包失败";
-        close(clientFD);
-        return -1;
-    }
-
-    if (!resp.ParseFromString(raw_body)) {
-        LOG_ERROR << "❌ 解析响应业务体失败";
-        close(clientFD);
-        return -1;
-    }
-
-    LOG_INFO << "\n🎉🎉🎉 测试成功！服务器返回了正确的响应！";
-    LOG_INFO << "📥 [Meta解析] SeqID: " << resp_meta.sequence_id();
-    LOG_INFO << "📥 [业务解析] RetCode: " << resp.ret_code() << ", Info: " << resp.res_info() << ", OrderID: " << resp.order_id();
-
-    close(clientFD);
+    LOG_INFO << "👋 客户端退出";
     return 0;
 }
